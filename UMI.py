@@ -10,30 +10,15 @@ This is a temporary script file.
 import os
 import time
 import re
+import collections
 #import sys
-#import pandas as pd
+import pandas as pd
 #from pytidyverse import *
 #from dplython import (DplyFrame, X, diamonds, select, sift, sample_n, sample_frac, head, arrange, mutate, group_by, summarize, DelayFunction)
 
 #remember to change directory
 os.chdir("C:\\Users\\snm0205\\Desktop\\UMI\\Run2_10ng_8samples_300cycles")
-# define an empty dictionary for primers
-dict_primer = {}
 
-#input primer file
-file_primer = "Primers_hg38_26.txt"
-dict_for_primer(file_primer, dict_primer)
-#print(dict_primer.keys())
-
-#define an empty dictionary for Read1 fastq   
-dict_fastq_R1 = {}
-dict_fastq_R2 = {}
-
-#input Read1 fastq file
-file_fastq_R1 = "20251-10_S1_L001_R1_001.fastq"
-file_fastq_R2 = "20251-10_S1_L001_R2_001.fastq"
-dict_for_fastq(file_fastq_R1, dict_fastq_R1)
-dict_for_fastq(file_fastq_R2, dict_fastq_R2)
 
 #function that takes in a primer file and an empty dictionary and returns 
 #dictionary with chr-pos as key and primer as value
@@ -66,8 +51,25 @@ def dict_for_fastq(file_fastq, dict_fastq_empty):
                  lines = []
                  #print(count)
          return dict_fastq_empty
-                
 
+               
+# define an empty dictionary for primers
+dict_primer = {}
+
+#input primer file
+file_primer = "Primers_hg38_26.txt"
+dict_for_primer(file_primer, dict_primer)
+#print(dict_primer.keys())
+
+#define an empty dictionary for Read1 fastq   
+dict_fastq_R1 = {}
+dict_fastq_R2 = {}
+
+#input Read1 fastq file
+file_fastq_R1 = "20251-10_S1_L001_R1_001.fastq"
+file_fastq_R2 = "20251-10_S1_L001_R2_001.fastq"
+dict_for_fastq(file_fastq_R1, dict_fastq_R1)
+dict_for_fastq(file_fastq_R2, dict_fastq_R2)
 
 
 start = time.time()
@@ -90,8 +92,9 @@ counter_noCS_match = 0
 #    for item in listofItems:
 
 # CS ATTGGAGTCCT
-UmiList = []
-LociList = []
+UmiLociList = []
+#LociList = []
+
 for key in set(dict_fastq_R1) & set(dict_fastq_R2):
     readR1 = dict_fastq_R1[key]
     readR2 = dict_fastq_R2[key]
@@ -99,26 +102,37 @@ for key in set(dict_fastq_R1) & set(dict_fastq_R2):
         counterCS += 1
         for items in dict_primer.items():
             if re.search(items[1], readR1):
-                LociPrimer = items[0]
+                Loci = items[0]
                 #R1 = readR1
                 #R2 = readR2
                 Primer = items[1]
                 searchCS = re.match(r'(^.{12})(ATTGGAGTCCT)', readR2)
                 UMI = searchCS.group(1)
                 CommSeq = searchCS.group(2)
-                #print (LociPrimer, UMI, CommSeq)
+                #print (Loci, UMI, CommSeq)
                 counterCS_P += 1
+                UmiLociList.append((UMI,Loci))
+                #LociList.append(Loci)
     else:
         counter_noCS_match += 1
         #if readR1.find(items[1]) != -1:
             #count += 1
             #print (items[1])
-           
-        
-        
+    
+UmiLociCount = collections.defaultdict(int)       
+for k in UmiLociList:
+    UmiLociCount[k] += 1
+    
+with open('UmiLociCount.txt', 'w') as fh:
+#    #print(UmiLociCount, file = fh)
+#    fh.write(str(UmiLociCount))
+    fh.writelines('{}:{}\n'.format(k,v) for k,v in UmiLociCount.items() )
+    
+#UmiLociCount_df = pd.DataFrame.from_dict([UmiLociCount])
+#UmiLociCount_df.to_csv('UmiLociCount.txt', header = False, mode = 'a')
 end = time.time()
 print(end-start)
-#print(notMatchcount)
+#print(UmiLociCount.items())
 print("Counter for CS = %d and counter for Primer = %d and counter for no CS match = %d" % (counterCS, counterCS_P, counter_noCS_match))
 
         
