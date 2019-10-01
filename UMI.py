@@ -11,7 +11,7 @@ import os
 import time
 import re
 import collections
-#import sys
+import sys
 import pandas as pd
 #from pytidyverse import *
 #from dplython import (DplyFrame, X, diamonds, select, sift, sample_n, sample_frac, head, arrange, mutate, group_by, summarize, DelayFunction)
@@ -38,18 +38,18 @@ def dict_for_fastq(file_fastq, dict_fastq_empty):
     n = 4
     with open(file_fastq, 'r') as fh:
          lines = []
-         #count = 0
+         count = 0
          for line in fh:
              lines.append(line.rstrip())
              if len(lines) == n:
-                 #count += 1
+                 count += 1
                  ks = ['name', 'sequence', 'optional', 'quality']
                  record = {k: v for k, v in zip(ks, lines)}
                  #sys.stderr.write("Record: %s\n" % (str(record)))
                  #print(record['name'],record['sequence'])
                  dict_fastq_empty[record['name'].split(' ')[0]] = record['sequence']
                  lines = []
-                 #print(count)
+         print(count)        
          return dict_fastq_empty
 
                
@@ -66,8 +66,8 @@ dict_fastq_R1 = {}
 dict_fastq_R2 = {}
 
 #input Read1 fastq file
-file_fastq_R1 = "20251-10_S1_L001_R1_001.fastq"
-file_fastq_R2 = "20251-10_S1_L001_R2_001.fastq"
+file_fastq_R1 = "07908-10_S7_L001_R1_001.fastq"
+file_fastq_R2 = "07908-10_S7_L001_R2_001.fastq"
 dict_for_fastq(file_fastq_R1, dict_fastq_R1)
 dict_for_fastq(file_fastq_R2, dict_fastq_R2)
 
@@ -76,20 +76,6 @@ start = time.time()
 counterCS_P = 0
 counterCS = 0
 counter_noCS_match = 0
-#notMatchcount = 0
-#for j in dict_fastq_R1:
-#    for k in dict_fastq_R2:
-#        if (j.split(' ')[0] == k.split(' ')[0]):
-#            count += 1
-#            #print (count, j.split(' ')[0])
-#            break
-#        else:
-#            notMatchcount += 1
-
-
-#def getKeysByVal(dictofElements):
-#    listofItems = dictofElements.items()
-#    for item in listofItems:
 
 # CS ATTGGAGTCCT
 UmiLociList = []
@@ -98,19 +84,21 @@ UmiLociList = []
 for key in set(dict_fastq_R1) & set(dict_fastq_R2):
     readR1 = dict_fastq_R1[key]
     readR2 = dict_fastq_R2[key]
-    if re.match(r'(^.{12})ATTGGAGTCCT', readR2):
+    #numMatches=0
+    if re.match(r'(.{12})(ATTGGAGTCCT)', readR2) is not None:
         counterCS += 1
         for items in dict_primer.items():
-            if re.search(items[1], readR1):
+            if re.match(items[1], readR1):
                 Loci = items[0]
                 #R1 = readR1
                 #R2 = readR2
                 Primer = items[1]
-                searchCS = re.match(r'(^.{12})(ATTGGAGTCCT)', readR2)
+                searchCS = re.match(r'(.{12})(ATTGGAGTCCT)', readR2)
                 UMI = searchCS.group(1)
-                CommSeq = searchCS.group(2)
-                #print (Loci, UMI, CommSeq)
+                #CommSeq = searchCS.group(2)
+                #print (Loci, UMI, )
                 counterCS_P += 1
+                #numMatches += 1
                 UmiLociList.append((UMI,Loci))
                 #LociList.append(Loci)
     else:
@@ -119,13 +107,15 @@ for key in set(dict_fastq_R1) & set(dict_fastq_R2):
             #count += 1
             #print (items[1])
     
+    #if numMatches > 1:
+    #    print("Should never happen!", UmiLociList[-numMatches:-1], file=sys.stderr)
+    #    sys.exit(1)
+    
 UmiLociCount = collections.defaultdict(int)       
 for k in UmiLociList:
     UmiLociCount[k] += 1
     
-with open('UmiLociCount.txt', 'w') as fh:
-#    #print(UmiLociCount, file = fh)
-#    fh.write(str(UmiLociCount))
+with open('UmiLociCount_primers_07908-10_S7_L001_R1_001.txt', 'w') as fh:
     fh.writelines('{}:{}\n'.format(k,v) for k,v in UmiLociCount.items() )
     
 #UmiLociCount_df = pd.DataFrame.from_dict([UmiLociCount])
