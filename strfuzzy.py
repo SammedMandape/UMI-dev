@@ -1,4 +1,4 @@
-
+#import pdb
 """Contains utilities for finding things in a fuzzy manner."""
 
 def fuzzyFind(inString, subString, fuzz=0, start=0, end=None):
@@ -24,6 +24,7 @@ def fuzzyFind(inString, subString, fuzz=0, start=0, end=None):
         totFuzz = 0
         for j in range(0, len(subString)):
             if sliceInStr[i+j] != subString[j]:
+                #pdb.set_trace()
                 totFuzz = totFuzz + 1
                 if totFuzz > fuzz:
                     break
@@ -31,7 +32,8 @@ def fuzzyFind(inString, subString, fuzz=0, start=0, end=None):
             return rstart + i
     return -1
 
-
+#print(fuzzyFind("ABCDEFGHIJK", "DZF", fuzz=0))
+#print(fuzzyFind("....ABC....", "ABC"))
 def fuzzyFindAll(inString, subString, fuzz=0, start=0, end=None):
     """
         This will search for all occurrences of a string (with up to fuzz number of mismatches) in another.
@@ -78,4 +80,4 @@ class _FuzzyTest(unittest.TestCase):
         self.assertTrue(set(fuzzyFindAll("....AGADAGA....", "AGA", 1)) == set([4,6,8]))
 
 if __name__ == "__main__":
-    unittest.main()
+   unittest.main()

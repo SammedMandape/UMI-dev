@@ -157,8 +157,8 @@ for k in UmiSTRLociList:
 #with open("Loci_ReadR2Seq_post_CS.txt", 'w+') as fh:
 #    fh.writelines('{}\t{}\n'.format(k,v) for k,v in LociRead2SeqCount_postCS.items())
     
-with open('UmiSTRLociCount_07908-10_S7_L001_R1_001_atStart_LName.txt', 'w') as fh:
-    fh.writelines('{}\t{}\n'.format(k,v) for k,v in UmiSTRLociCount.items() )
+with open('UmiSTRLociCount_07908-10_S7_L001_R1_001_atStart_LName_dup.txt', 'w') as fh:
+    fh.writelines(["\t".join(k) + "\t" + repr(v) + "\n" for k,v in UmiSTRLociCount.items()])
     
 #UmiLociCount_df = pd.DataFrame.from_dict([UmiLociCount])
 #UmiLociCount_df.to_csv('UmiLociCount.txt', header = False, mode = 'a')
