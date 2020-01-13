@@ -182,7 +182,7 @@ for key in filedict:
     for k in UmiSTRLociList:
         UmiSTRLociCount[k] += 1
         
-    with open('UmiSTRLociCount_%s_atStart_LName_fuzzy_1_drop_locus_test_del.txt' % (file_fastq_R1[:-6]), 'w') as fh:
+    with open('UmiSTRLociCount_%s_atStart_LName_fuzzy_1.txt' % (file_fastq_R1[:-6]), 'w') as fh:
         fh.writelines('{}\t{}\n'.format('\t'.join(k),v) for k,v in UmiSTRLociCount.items() )
     
 

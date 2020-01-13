@@ -53,12 +53,19 @@ file_primer = "PrimedAnchors.txt"
 dict_for_primer(file_primer, dict_primer)
 #print(dict_primer)
 
-s = "ACGTACGTCCCACACGGCCTGGCAACTTATATGTATTTTTGTATTTCATGTGTACATTCGTATCTATCTATCTGTCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATTCCCCACAGTGAAAATAATCTACAGGATAGGTAAATAAATTAAGGCATATTCACGCAATGGGATACGATACAGTGATGAAAATGAACTAATTATAGCTACGTGAAACTATACTCATGAACACAATTTTGTAAAAGAAACAGGACTCCAATTTTCGCTCTTCC"
+s = "CCCACACGGCCTGGCAACTTATATGTATTTTTGTATTTCATGTGTACATTCGTATCTATCTATCTGTCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATTCCCCACAGTGAAAATAATCTACAGGATAGGTAAATAAATTAAGGCATATTCACGCAATGGGATACGATACAGTGATGAAAATGAACTAATTATAGCTACGTGAAACTATACTCATGAACACAATTTTGTAAAAGAAACAGGACTCCAATTTTCGCTCTTCC"
 
 for items in dict_primer.items():
     #print(items[1][3])
     #myregex = re.escape(items[1][3]) + (r".*") + re.escape(items[1][4])
-    if re.search(r'%s(.*)%s' % (items[1][3], items[1][4]), s):
-        print(re.search(r'%s(.*)%s' % (items[1][3], items[1][4]), s).group(1))
+    anchor = items[1][4]
+    anchorIndex = strfuzzy.fuzzyFind(s, anchor, fuzz=1)
+    primer = items[1][3]
+    if (s.startswith(primer, 0, len(primer)) and (anchorIndex >= 0)):
+        #print(re.match(r'%s(.*)%s' % (primer, anchor), s).group(1))
+        print(s[len(primer):anchorIndex])
+        #m = re.match(r'%s.*' % items[1][3], s)
+        
+        #print(r'%s(.*)
     else:
         print('no match')
