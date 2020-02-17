@@ -1,0 +1,300 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r "setup"}
+require("knitr")
+opts_knit$set(root.dir = "/home/snm0205/10ng_300_16samples_common_W_100pg")
+```
+
+```{r}
+library(tidyverse)
+
+getwd()
+
+# given a vector of file names, this function combines all the files into one tibble.
+comb_files2tibble <- function(my_files_vec, my_dest = "."){
+  
+  #create a list of tibbles, add col names, skip first line, if necessary
+  my_list_tibble <- purrr::map(my_files_vec, ~ readr::read_delim(file = paste0(my_dest,"/",.), delim = "\t",skip = 1, col_names = c("Loci","UMI","Primer","readR1","Count")))
+  
+  # names the list to include file names or part of the file names
+  names(my_list_tibble) <- stringr::str_replace(my_files_vec, pattern = "UmiSTRLociCount_([:digit:]{5}-.*)_L001_R1_001_atStart_LName_with_primer\\.txt$", replacement = "\\1")
+  
+  # combine data frames also adding a new column called group that will include
+  # the name of the list (sample_id)
+  my_files_combined <- my_list_tibble %>% purrr::map_dfr(~ .x, .id = "Group")
+  
+  return(my_files_combined)
+}
+
+# vector with all the files names for 10ng
+my_files_10ng <- list.files(pattern = ".*L001_R1_001_atStart_LName_with_primer\\.txt$")
+
+my_data_10ng <- comb_files2tibble(my_files_10ng)
+
+saveRDS(my_data_10ng, file = "my_data_W_primer_10ng.rds")
+
+
+# read files 100pg from another directory
+my_path = "/home/snm0205/Run5_100pg_300_16samples/"
+my_files_100pg <- list.files(path = my_path,pattern = ".*L001_R1_001_atStart_LName_with_primer\\.txt$")
+
+my_data_100pg <- comb_files2tibble(my_files_100pg, my_path)
+
+saveRDS(my_data_100pg, file = paste0(my_path, "/","my_data_W_primer_100pg.rds"))
+
+my_data1_10ng <- my_data_10ng %>% separate(Group, into = c("GroupID")) %>% group_by(GroupID,Loci) %>% summarise(distUMI_10ng=n_distinct(UMI))
+
+my_data1_100pg<-my_data_100pg %>% separate(Group, into = c("GroupID")) %>% group_by(GroupID,Loci) %>% summarise(distUMI_100pg=n_distinct(UMI))
+
+my_data_10_100<-right_join(my_data1_100pg,my_data1_10ng,by=c("GroupID","Loci"))
+
+ggplot(my_data_10_100, mapping = aes(x=distUMI_10ng,y=distUMI_100pg)) + geom_point(aes(color=Loci)) + geom_hline(yintercept = 32)
+ggsave("Distinct UMI 10ng vs 0.1ng.jpeg")
+
+group_by(my_data_10_100, GroupID) %>%
+  mutate(UMI_100pg= mean(distUMI_100pg, na.rm=TRUE),
+         UMI_0.1pg= mean(distUMI_10ng, na.rm=TRUE)
+         ) %>%
+ggplot(mapping = aes(x=UMI_0.1pg,y=UMI_100pg)) + 
+  geom_point(aes(color=GroupID)) + 
+  geom_abline(linetype='dashed') +
+  geom_abline(linetype='solid', intercept=-10, slope=1) +
+  geom_smooth(method='lm', formula="y ~ 0 + x") +
+  scale_x_log10(limits=c(1,5000), labels=scales::comma) +
+  scale_y_log10(limits=c(1,5000), labels=scales::comma) +
+  labs(x="Average number of UMIs (10 ng)", y="Average number of UMIs (0.1 ng)", color="Individual")
+
+ggsave("Distinct UMI 10ng vs 0.1ng_xylim.jpeg")
+
+ggplot(my_data_10_100, mapping = aes(x=distUMI_10ng,y=distUMI_100pg)) + geom_point() + facet_wrap(~GroupID, scales = "free") + geom_hline(yintercept = 32) #+ coord_cartesian(xlim = c(0,7000), ylim = c(0,1500))
+
+foo<-my_data_100pg %>% filter(Loci == "FGA") %>% group_by(UMI) %>% summarise(numUMI = n(), RD = sum(Count))
+ggplot(foo) + geom_bar(mapping = aes(x=numUMI, y=RD), stat = "identity")
+```
+
+```{r}
+# reading and processing primer_STRseq_anchor for ref file
+ref_my_data <- readr::read_delim(file = "primer_STRseq_anchor_ref.txt", delim = "\t", col_names = c("Locus", "Ref_completeSeq", "Ref_STRseq", "Ref_Primer", "Ref_Anchor", "Strand"))
+
+# merge sample file with ref file
+my_data1_with_primer_anchor_n_ref <-  my_data1_with_primer_anchor %>% dplyr::left_join(ref_my_data, by = c("Primer" = "Ref_Primer"))
+
+# get the reference repeat size and hg38 allele information for each locus.
+loc_repeat_allele <- readr::read_delim(file = "Locus_repeatSize_allele.txt", delim = "\t")
+
+# merge locus_repeat_allele information with primer_anchor_n_ref
+my_data1_with_primer_anchor_n_ref <- my_data1_with_primer_anchor_n_ref %>% dplyr::left_join(loc_repeat_allele, by ="Loci")
+
+my_data2_with_primer_anchor_n_ref <- my_data1_with_primer_anchor_n_ref %>% select(-c(Locus, Anchor)) %>% mutate(RefLen = stringr::str_length(Ref_STRseq), offset_ref = RefLen - (Repeat_size * HG38_Allele), SampleStrLen = stringr::str_length(STRseq), AlleleCall = round((SampleStrLen - offset_ref)/Repeat_size, digits = 2)) %>% tidyr::separate(., col = AlleleCall, into = c("Allele_1", "Allele_2"), sep = "\\.") 
+#tidyr::unite("AlleleCall", Allele_1:Allele_2, sep = ".", na.rm = TRUE, remove = FALSE)
+
+# replace_na can be skipped, if using unite and na.rm is set to TRUE in tidyr::unite. But this is only possible if tidyr
+# is updated to the current developmental version (the bug is fixed here, but the updated tidyr is not yet available on 
+# CRAN). na.rm doesn't work for this version of tidyr. (eg: tidyr::unite("AlleleCall", Allele_1:Allele_2, sep = ".", remove = FALSE))
+my_data2_with_primer_anchor_n_ref <- my_data2_with_primer_anchor_n_ref %>% tidyr::replace_na(list(Allele_2=0)) %>% mutate("AlleleCall" = dplyr::if_else(Allele_2 == 0, as.character(Allele_1), str_c(Allele_1, Allele_2, sep = ".")))
+
+```
+
+```{r}
+# get distinct UMIs per loci
+distUMI_per_sample <- my_data2_with_primer_anchor_n_ref %>% group_by(Group, Loci) %>% summarise(distUMI = n_distinct(UMI))
+
+# plot graphs
+ggplot(data = distUMI_per_sample, mapping = aes(x=Loci, y=distUMI)) + geom_bar(stat = "identity") + facet_wrap(~Group, scales = "free") + coord_flip() + theme(axis.text.x = element_text(size = 7), axis.text.y = element_text(size = 10))
+ggsave("Distinct_UMI_per_sample.jpeg", height = 15, width = 14)
+
+# density graph of UMI per sample
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI, y=..density..)) + geom_freqpoly(aes(color=Group)) + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot")
+ggsave("Density_plot.jpeg")
+
+# slightly different versions / visualizations of density plot
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI)) + geom_density(aes(color=Group, alpha=0.1), position = "stack") + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot")
+ggsave("Density_plot_v1.jpeg")
+
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI)) + geom_density(aes(color=Group, fill=Group), position = "stack") + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot(Stacked version)")
+ggsave("Density_plot_v2_stacked.jpeg")
+
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI)) + geom_density(fill = 'cyan', color = 'cyan') + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot") + theme(panel.background = element_rect(fill = '#444B5A'), panel.grid.minor = element_line(color = '#4d5566'), panel.grid.major = element_line(color = '#586174'))
+ggsave("Density_plot_v3_all.jpeg")
+```
+
+
+
+```{r}
+# getting the length of offset and understanding the pattern
+my_data2_with_primer_anchor_n_ref %>% dplyr::pull(offset_ref) %>% unique() %>% sort()
+
+
+# EDA for getting Loci and offset length to determine longest allele. This info was gathered for benchwork purpose.  
+alleleOffset <- my_data2_with_primer_anchor_n_ref %>% dplyr::group_by(offset_ref) %>% dplyr::arrange(offset_ref) %>% dplyr::distinct(Loci)
+```
+
+
+```{r}
+# appending the code here from another script that was continuation of the above but starts from reading in rds files which
+# were generated above.
+
+
+mydata_0.1<-readRDS("my_data_W_primer_100pg.rds")
+
+mydata_10<-readRDS("my_data_W_primer_10ng.rds")
+
+
+
+mydata1_10 <- mydata_10 %>% 
+  #filter(Count>1) %>%
+  separate(Group, into = c("GroupID")) %>%
+  group_by(GroupID, Loci, UMI) %>% 
+  #summarise(UMI_0.1 = n_distinct(UMI), RD=sum(Count)) %>%
+  summarise(UMIperLocus=n(), ReadsperUMI=sum(Count)) #%>% 
+  #arrange(desc(ReadsperUMI)) %>%
+  filter(mydata1_10, Loci == "PentaE", GroupID=="33886") %>%
+ggplot() +
+  #geom_density(mapping = aes(x=ReadsperUMI)) + 
+  geom_bar(aes(x=UMIperLocus,y=ReadsperUMI), stat = "identity")
+  coord_cartesian(xlim = c(0,100))
+  
+  
+mydata1_0.1 <- mydata_0.1 %>% 
+  #filter(Count>1) %>%
+  separate(Group, into = c("GroupID")) %>%
+  group_by(GroupID, Loci, UMI) %>% 
+  #summarise(UMI_0.1 = n_distinct(UMI), RD=sum(Count)) %>%
+  summarise(UMIperLocus=n(), ReadsperUMI=sum(Count)) #%>% 
+  #arrange(desc(ReadsperUMI)) %>%
+  filter(mydata1_0.1, Loci == "PentaE", GroupID=="33886") %>%
+ggplot() +
+  #geom_density(mapping = aes(x=ReadsperUMI)) + 
+  geom_bar(mapping = aes(x=UMIperLocus,y=ReadsperUMI),stat = "identity")
+  coord_cartesian(xlim = c(0,100))
+
+mydata2_10<-mydata_10 %>% filter(Count>1) %>% 
+  separate(Group, into = c("GroupID")) %>%
+  group_by(GroupID,Loci) %>% 
+  summarise(distUMI_10 = n_distinct(UMI), RD_10 = sum(Count))
+
+mydata2_0.1<-mydata_0.1 %>% filter(Count>1) %>%
+  separate(Group, into = c("GroupID")) %>%
+  group_by(GroupID,Loci) %>% 
+  summarise(distUMI_0.1 = n_distinct(UMI), RD_0.1 = sum(Count))
+
+my_data_10_100 <- left_join(mydata2_10,mydata2_0.1,by=c("GroupID","Loci"))
+
+
+group_by(my_data_10_100, GroupID) %>%
+  mutate(UMI_100pg= mean(distUMI_0.1, na.rm=TRUE),
+         UMI_0.1pg= mean(distUMI_10, na.rm=TRUE)
+         ) %>%
+ggplot(mapping = aes(x=UMI_0.1pg,y=UMI_100pg)) + 
+  geom_point(aes(color=GroupID)) + 
+  geom_abline(linetype='dashed') +
+  geom_abline(linetype='solid', intercept=-10, slope=1) +
+  #geom_smooth(method='lm', formula="y ~ 0 + x") +
+  scale_x_log10(limits=c(1,5000), labels=scales::comma) +
+  scale_y_log10(limits=c(1,5000), labels=scales::comma) +
+  labs(x="Average number of UMIs (10 ng)", y="Average number of UMIs (0.1 ng)", color="Individual")
+ggsave("Average number of UMIs 10ng vs 0.1ng.jpeg")
+```
+
+```{r}
+# Looking at the proportion of DNA vs RD
+foo<-mydata_10 %>% group_by(Group, Loci, UMI) %>% mutate(Proportion = max(Count)/sum(Count))
+
+bar<-group_by(foo,Group,Loci,UMI) %>% summarise(Prop = unique(Proportion), RD=sum(Count) )
+
+filter(bar, RD>1) %>% group_by(Group) %>%
+  ggplot(mapping = aes(x=RD,y=(Prop*100))) + geom_smooth() +
+  #geom_point() + 
+  facet_wrap(~Group, scales = "free_x")
+```
+
+```{r}
+# avg reads per indv
+library(ggstance)
+AvgReadsPerIndv<-mydata_10 %>% group_by(Group) %>% summarise(AvgReadsPerIndv = mean(Count), TotReadsPerInv = sum(Count), AvgUMIPerIndv = mean(n_distinct(UMI)), TotUMIperIndv = sum(n_distinct(UMI)))
+
+AvgReadsPerIndv_0.1<-mydata_0.1 %>% group_by(Group) %>% summarise(AvgReadsPerIndv = mean(Count), TotReadsPerInv = sum(Count), AvgUMIPerIndv = mean(n_distinct(UMI)), TotUMIperIndv = sum(n_distinct(UMI)))
+
+ReadPerLocSam_10 <- mydata_10 %>% group_by(Group, Loci) %>% summarise(ReadsPerLoci = sum(Count))
+
+ReadPerLocSam_0.1 <- mydata_0.1 %>% group_by(Group, Loci) %>% summarise(ReadsPerLoci = sum(Count))
+
+UMIPerLocSam_10 <- mydata_10 %>% group_by(Group, Loci) %>% summarise(UMIsPerLoci = n_distinct(UMI))
+
+UMIPerLocSam_0.1 <- mydata_0.1 %>% group_by(Group, Loci) %>% summarise(UMIsPerLoci = n_distinct(UMI))
+
+ReadPerLocSam_10 %>% filter(Group %in% c("00425-10_S5","03732-10_S6","07908-10_S7","10636-10_S7", "14742-10_S5","17718-10_S8", "25201-10_S8", "33886-10_S5")) %>%
+  ggplot(mapping = aes(x=ReadsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of reads per Locus")
+
+ReadPerLocSam_10 %>% filter(Group %in% c("37387-10_S1","39504-10_S3","47797-10_S4", "50609-10_S2", "56710-10_S3","65569-10_S4","67092-10_S1","89554-10_S8")) %>%
+  ggplot(mapping = aes(x=ReadsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of reads per Locus")
+
+ReadPerLocSam_0.1 %>% filter(Group %in% c("00425-100_S4","03732-100_S14","07908-100_S15","10636-100_S8",  "14742-100_S13","17718-100_S6","25201-100_S5","33886-100_S9")) %>%
+  ggplot(mapping = aes(x=ReadsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of reads per Locus")
+
+ReadPerLocSam_0.1 %>% filter(Group %in% c("37387-100_S10", "39504-100_S3","47797-100_S7",  "50609-100_S2","56710-100_S11","65569-100_S12","67092-100_S1","89554-100_S16")) %>%
+  ggplot(mapping = aes(x=ReadsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of reads per Locus")
+
+UMIPerLocSam_10 %>% filter(Group %in% c("00425-10_S5","03732-10_S6","07908-10_S7","10636-10_S7", "14742-10_S5","17718-10_S8", "25201-10_S8", "33886-10_S5")) %>%
+  ggplot(mapping = aes(x=UMIsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of UMIs per Locus")
+
+UMIPerLocSam_10 %>% filter(Group %in% c("37387-10_S1","39504-10_S3","47797-10_S4", "50609-10_S2", "56710-10_S3","65569-10_S4","67092-10_S1","89554-10_S8")) %>%
+  ggplot(mapping = aes(x=UMIsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of UMIs per Locus")
+
+UMIPerLocSam_0.1 %>% filter(Group %in% c("00425-100_S4","03732-100_S14","07908-100_S15","10636-100_S8",  "14742-100_S13","17718-100_S6","25201-100_S5","33886-100_S9")) %>%
+  ggplot(mapping = aes(x=UMIsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of UMIs per Locus")
+
+UMIPerLocSam_0.1 %>% filter(Group %in% c("37387-100_S10", "39504-100_S3","47797-100_S7",  "50609-100_S2","56710-100_S11","65569-100_S12","67092-100_S1","89554-100_S16")) %>%
+  ggplot(mapping = aes(x=UMIsPerLoci, y=Loci)) + 
+  geom_barh(stat = "identity") + 
+  facet_wrap(~Group, scales = "free", nrow = 2) + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8)) + 
+  labs(x="Number of UMIs per Locus")
+```
+
+
+
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

@@ -1,0 +1,147 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within thevie chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+```{r "setup"}
+require("knitr")
+opts_knit$set(root.dir = "/home/snm0205/10ng_300_16samples_common_W_100pg")
+```
+
+
+```{r}
+# This chunk is to get a combined tibble for all input files.
+
+#setwd("/home/snm0205/10ng_300_16samples_common_W_100pg")
+
+library(tidyverse)
+
+# vector with all the files names
+my_files <- list.files(pattern = ".*L001_R1_001_atStart_LName_fuzzy_1_with_primer_anchor\\.txt$")
+
+# get a list of tibble my_data for primer_with_anchor
+my_data_with_primer_anchor <- purrr::map(my_files, ~ readr::read_delim(file = ., delim = "\t",skip = 1,col_names = c("Loci", "STRseq", "UMI", "Primer", "Anchor", "Count")))
+
+# name the list to include sample_id
+names(my_data_with_primer_anchor) <- stringr::str_replace(my_files, pattern = ".*([:digit:]{5}-.*)_atStart_LName_fuzzy_1_with_primer_anchor\\.txt$", replacement = "\\1")
+
+# combine data frames also adding a new column called group that will include
+# the name of the list (sample_id)
+my_data1_with_primer_anchor <- my_data_with_primer_anchor %>% purrr::map_dfr(~ .x, .id = "Group")
+
+# groupby Individuals (sample_id), loci, and UMI and arrange by desc to get reads / UMI for that
+# particular STRseq. This will help to differentiate noise from signal.
+# my_data_test <- my_data1 %>% group_by(Group, Loci, UMI) %>% arrange(Loci, UMI, desc(Count))
+# 
+# my_data_test <- my_data1 %>% add_count(Group, Loci, UMI) %>% arrange(desc(Count, n))
+# 
+# my_data1 %>% group_by(Group, Loci) %>% summarise(distUMI = n_distinct(UMI)) %>% arrange(Loci, desc(distUMI))
+# 
+# my_data_sorted <- my_data1 %>% filter(Loci =="D4S2408")
+# my_data_sorted_CSD1PO <- my_data1 %>% filter(Loci == "CSF1PO")
+
+```
+
+
+```{r}
+# this chunk is to get the allelecalls for all the samples, it uses reference for calculations. 
+
+# reading and processing primer_STRseq_anchor for ref file
+ref_my_data <- readr::read_delim(file = "primer_STRseq_anchor_ref.txt", delim = "\t", col_names = c("Locus", "Ref_completeSeq", "Ref_STRseq", "Ref_Primer", "Ref_Anchor", "Strand"))
+
+# merge sample file with ref file
+my_data1_with_primer_anchor_n_ref <-  my_data1_with_primer_anchor %>% 
+                                      dplyr::left_join(ref_my_data, by = c("Primer" = "Ref_Primer"))
+
+# get the reference repeat size and hg38 allele information for each locus.
+loc_repeat_allele <- readr::read_delim(file = "Locus_repeatSize_allele.txt", delim = "\t")
+
+# merge locus_repeat_allele information with primer_anchor_n_ref
+my_data1_with_primer_anchor_n_ref <- my_data1_with_primer_anchor_n_ref %>% 
+                                      dplyr::left_join(loc_repeat_allele, by ="Loci")
+
+# AlleleCall calculation
+my_data1_with_primer_anchor_n_ref %>% 
+  dplyr::select(-c(Anchor, Locus)) %>% 
+  mutate(RefLen = stringr::str_length(Ref_STRseq), offset_ref = RefLen - (Repeat_size * HG38_Allele), SampleStrLen = stringr::str_length(STRseq), AlleleCall = round((SampleStrLen - offset_ref)/Repeat_size, digits = 2)) %>% 
+  tidyr::separate(., col = AlleleCall, into = c("Allele_1", "Allele_2"), sep = "\\.") -> my_data2_with_primer_anchor_n_ref
+#tidyr::unite("AlleleCall", Allele_1:Allele_2, sep = ".", na.rm = TRUE, remove = FALSE)
+
+# replace_na can be skipped, if using unite and na.rm is set to TRUE in tidyr::unite. But this is only possible if tidyr
+# is updated to the current developmental version (the bug is fixed here, but the updated tidyr is not yet available on 
+# CRAN). na.rm doesn't work for this version of tidyr. (eg: tidyr::unite("AlleleCall", Allele_1:Allele_2, sep = ".", remove = FALSE))
+my_data2_with_primer_anchor_n_ref <- my_data2_with_primer_anchor_n_ref %>% 
+                                    tidyr::replace_na(list(Allele_2=0)) %>% 
+                                    mutate("AlleleCall" = dplyr::if_else(Allele_2 == 0, as.character(Allele_1), str_c(Allele_1, Allele_2, sep = ".")))
+
+
+```
+
+```{r}
+# this chunk is to get distinct UMIs per locus and get some plots
+
+# get distinct UMIs per loci
+distUMI_per_sample <- my_data2_with_primer_anchor_n_ref %>% group_by(Group, Loci) %>% summarise(distUMI = n_distinct(UMI))
+
+# plot graphs
+ggplot(data = distUMI_per_sample, mapping = aes(x=Loci, y=distUMI)) + geom_bar(stat = "identity") + facet_wrap(~Group, scales = "free") + coord_flip() + theme(axis.text.x = element_text(size = 7), axis.text.y = element_text(size = 10))
+ggsave("Distinct_UMI_per_sample.jpeg", height = 15, width = 14)
+
+# density graph of UMI per sample
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI, y=..density..)) + geom_freqpoly(aes(color=Group)) + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot")
+ggsave("Density_plot.jpeg")
+
+# slightly different versions / visualizations of density plot
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI)) + geom_density(aes(color=Group, alpha=0.1), position = "stack") + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot")
+ggsave("Density_plot_v1.jpeg")
+
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI)) + geom_density(aes(color=Group, fill=Group), position = "stack") + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot(Stacked version)")
+ggsave("Density_plot_v2_stacked.jpeg")
+
+ggplot(distUMI_per_sample, mapping = aes(x=distUMI)) + geom_density(fill = 'cyan', color = 'cyan') + labs(x = "Distinct UMI's per sample", y = "Density", title = "Density plot") + theme(panel.background = element_rect(fill = '#444B5A'), panel.grid.minor = element_line(color = '#4d5566'), panel.grid.major = element_line(color = '#586174'))
+ggsave("Density_plot_v3_all.jpeg")
+```
+
+
+```{r}
+# getting the length of offset and understanding the pattern
+my_data2_with_primer_anchor_n_ref %>% dplyr::pull(offset_ref) %>% unique() %>% sort()
+
+
+# EDA for getting Loci and offset length to determine longest allele. This info was gathered for benchwork purpose.  
+alleleOffset <- my_data2_with_primer_anchor_n_ref %>% dplyr::group_by(offset_ref) %>% dplyr::arrange(offset_ref) %>% dplyr::distinct(Loci)
+```
+
+
+```{r}
+# compare truth data with allelecalls
+my_data2_grpd <- my_data2_with_primer_anchor_n_ref %>% 
+  group_by(Group, Loci) %>% 
+  mutate(n = n()) %>% 
+  dplyr::select(-c(STRseq:Primer, Ref_completeSeq:Allele_2))
+
+foo<-my_data2_grpd[stringr::str_which(my_data2_grpd$Group, "^07908"),]
+
+length(str_subset(my_data2_grpd$Group, "7908"))
+unique(my_data2_grpd$Group)
+
+# EDA plot to see how many alleles are present and frequency of those alleles.
+foo %>% filter(Loci=="CSF1PO") %>% ggplot(aes(x=AlleleCall)) + geom_histogram(stat = "count") + theme(axis.text.x = element_text(angle = 90)) + labs(title = "07908-CSF1PO", subtitle = "True alleles = (11,12)", x = "Allele", y="Frequency")
+
+foo %>% group_by(Loci, AlleleCall) %>% 
+
+```
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
