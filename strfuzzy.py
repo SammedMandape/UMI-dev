@@ -1,4 +1,5 @@
 #import pdb
+# Author: Benjamin Crysup
 """Contains utilities for finding things in a fuzzy manner."""
 
 def fuzzyFind(inString, subString, fuzz=0, start=0, end=None):
