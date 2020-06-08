@@ -1,0 +1,149 @@
+---
+title: "UMI"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/Sammed/Desktop/UNTHSC/UMI/CLC_analyses")
+library(reticulate)
+library(tidyverse)
+```
+
+```{r}
+
+##my_dest = "data"
+#etwd(my_dest)
+##my_files <- Sys.glob(paste(my_dest,"*.csv", sep = "/"))
+
+my_files <- read_delim("./data/00425-100_S4_L001_R1_001 (paired, RAUMI) (UMI).csv", delim = ",", col_names = F)
+
+
+# datacomb <- function(x){
+#   my_x <- read_delim(x, delim = ",", col_names = FALSE)
+#   my_x <- my_x %>% arrange(X1) %>%
+#     select(-X2) %>%
+#     separate(X1, into = c("ID","blah","Count"), sep = "\\s") %>%
+#     dplyr::mutate(Count = replace_na(Count, 0)) %>%
+#     separate(Count, into = c("blah1","blah2"), sep = "(?<=\\[)", fill = "left") %>%
+#     separate(blah2, into=c("ReadCount","blah3"),sep = "(?=\\])") %>%
+#     select(-c("blah","blah1","blah3")) %>% mutate(filename = x)
+#   return(my_x)
+# }
+
+#my_data <- map(my_files, datacomb)
+#my_data <- purrr::map_dfr(my_data, ~ .x)  
+
+mydata <- my_files %>%
+  arrange(X1) %>% 
+  select(-X2) %>% 
+  separate(X1, into = c("ID","blah","Count"), sep = "\\s") %>% 
+  dplyr::mutate(Count = replace_na(Count, 0)) %>%
+  separate(Count, into = c("blah1","blah2"), sep = "(?<=\\[)", fill = "left") %>% 
+  separate(blah2, into=c("ReadCount","blah3"),sep = "(?=\\])") %>%
+  select(-c("blah","blah1","blah3"))
+mydata
+
+```
+
+```{python}
+complement = {'A' : 'T', 'C' : 'G', 'T' : 'A', 'G' : 'C'}
+
+def reverse_complement(seq):
+    bases = list(seq)
+    bases = ''.join(complement[base] for base in reversed(bases))
+    return bases
+
+#function that takes in a primer file and an empty dictionary and returns 
+#dictionary with pos as key and primer as value
+def dict_for_primer(file_primer):
+    dict_primer_empty = {}
+    if not file_primer:
+        raise SystemError("Error: Specify primer file name\n")
+    with open(file_primer, 'r') as fh_primer:
+        for line in fh_primer:
+            (val1Locus, val2Chr, keyPos, val3Strand, val4Primer, val5Anchor) = (line.rstrip('\n')).split('\t')
+            if val3Strand == "1":
+                val4Primer = reverse_complement(val4Primer)
+                val5Anchor = reverse_complement(val5Anchor)
+            else:
+                pass
+            dict_primer_empty[keyPos] = [val1Locus, val2Chr, val3Strand, val4Primer, val5Anchor]
+    return dict_primer_empty
+    
+#input primer file
+file_primer = "PrimedAnchors.txt"
+dict_primer = dict_for_primer(file_primer)
+```
+
+
+
+```{r "importing strfuzzy package"}
+#import("strfuzzy", convert = FALSE)
+reticulate::import_from_path("strfuzzy", path = ".")
+```
+
+
+
+```{python}
+import strfuzzy
+mydata_py = r.mydata
+mypydata = mydata_py.set_index('ID').T.to_dict('list')
+
+UmiSTRLociList = []
+counter_P_A = 0
+counter_P = 0
+
+for mydatakey, mydataitems in mypydata.items():
+  ID = mydatakey
+  ReadCount = mydataitems[0]
+  readR1 = mydataitems[1]  
+  for key, items in dict_primer.items():
+    Pos = key
+    anchor = items[4]
+    anchorIndex = strfuzzy.fuzzyFind(readR1, anchor, fuzz=1)
+    primer = items[3]
+    if readR1.startswith(primer, 0, len(primer)):
+      counter_P += 1
+    if ((readR1.startswith(primer, 0, len(primer))) and (anchorIndex >= 0)):
+      Loci = items[0]
+      STRseq =  readR1[len(primer):anchorIndex]
+      counter_P_A += 1
+      UmiSTRLociList.append((ID, ReadCount, readR1, Loci, STRseq, primer, anchor))
+    
+
+  
+
+```
+
+```{python}
+import os
+dict_primer
+#mypydata
+#os.getcwd()
+#r.mydata[1:10]
+```
+
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
