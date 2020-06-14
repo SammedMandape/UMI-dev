@@ -3,6 +3,7 @@ import time
 import re
 import collections
 import strfuzzy
+import random
 
 complement = {'A' : 'T', 'C' : 'G', 'T' : 'A', 'G' : 'C'}
 
@@ -15,6 +16,16 @@ def reverse_complement(seq):
     bases = list(seq)
     bases = ''.join(complement[base] for base in reversed(bases))
     return bases
+
+def umidict(numrow):
+    my_umidict = {}
+    my_i = 0
+    while my_i < numrow:
+        my_umi = ''.join(random.choice('AGTC') for _ in range(12))
+        if my_umi not in my_umidict:
+            my_i += 1
+            my_umidict[my_umi] = 1
+    return list(my_umidict.keys())
 
 def dict_for_primer(file_primer):
     ''' 
@@ -40,17 +51,20 @@ def dict_for_primer(file_primer):
 file_primer = "PrimedAnchors.txt"
 dict_primer = dict_for_primer(file_primer)
 
-def mainfunc(data, name):
+def mainfunc(data, name, numrows):
     '''
     This function searches for primer and anchor in reads and pulls out STRseq between them.
     @param data: The tibble/data frame.
     @param name: The output file name.
+    @param numrows: Number of rows of the input data to be used to generate random UMIs
     @return: Writes a output file with STRseq and other metadata.
     '''
     mypydata = data.set_index('ID').T.to_dict('list')
     UmiSTRLociList = []
     counter_P_A = 0
     counter_P = 0
+    umilistIdx = 0
+    umilist = umidict(numrows)
     for mydatakey, mydataitems in mypydata.items():
         ID = mydatakey
         ReadCount = mydataitems[0]
@@ -66,15 +80,20 @@ def mainfunc(data, name):
                 Loci = items[0]
                 STRseq =  readR1[len(primer):anchorIndex]
                 counter_P_A += 1
-                UmiSTRLociList.append((ID, ReadCount, readR1, Loci, STRseq, primer, anchor))
-                
+                umi = umilist[umilistIdx]
+                umilistIdx +=1
+                #print("umilist index: %s" % umilistIdx)
+                #UMI = ''.join(random.choice('AGTC') for _ in range(12))
+                UmiSTRLociList.append((Loci, STRseq, umi, primer, anchor, ReadCount))
+    
+    #print(len(umilist))            
     UmiSTRLociCount = collections.defaultdict(int)
     for k in UmiSTRLociList:
       UmiSTRLociCount[k] += 1
     
     outfilename = name + "_noN.tsv"
     with open(outfilename, 'w') as fh:
-      fh.writelines("Number of Primer match = %d, Number of Primer and Anchor = %d" % (counter_P, counter_P_A))
+      fh.writelines("Number of Primer match = %d, Number of Primer and Anchor = %d\n" % (counter_P, counter_P_A))
       fh.writelines('{}\t{}\n'.format('\t'.join(k),v) for k,v in UmiSTRLociCount.items() )
 
 
