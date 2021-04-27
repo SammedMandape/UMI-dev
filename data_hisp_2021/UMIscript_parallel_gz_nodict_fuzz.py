@@ -15,7 +15,7 @@ import gzip
 import resource
 
 #TODO use argparse
-# sys.argv - 1)read1_fastq, 2)read2_fastq, 3)consensus-fuzz, 4)primer-fuzz, 5)anchor-fuzz, 6)inputDirectory, 7)outputDirectory, 8)suffix_to_file_name
+# sys.argv - 1)read1_fastq, 2)read2_fastq, 3)consensus-fuzz, 4)primer-fuzz, 5)anchor-fuzz, not the remaining ones 6)inputDirectory, 7)outputDirectory, 8)suffix_to_file_name
 
 # directory = sys.argv [6]
 # outputdir = sys.argv[7]
@@ -148,7 +148,8 @@ file_fastq_R2 = sys.argv[2]
 #dict_fastq_R1 = dict_for_fastq(directory,file_fastq_R1) #
 #dict_fastq_R2 = dict_for_fastq(directory,file_fastq_R2) #
 UmiSTRLociList = []
-counterCS_P_0 = counterCS_P_1 = counterCS_P_2 = counterCS_P_A = 0
+#counterCS_P_0 = counterCS_P_1 = counterCS_P_2 = counterCS_P_A = 0
+counterCS_P = counterCS_P_A = 0
 counterCS = counter_noCS_match = 0
 numofLine = 0
 
@@ -192,12 +193,13 @@ with gzip.open(file_fastq_R1, "rt") as handleR1, gzip.open(file_fastq_R2, "rt") 
                         primer_fuzz=primer_fuzz_tup[1]
                         primer_fuzz_idx=primer_fuzz_tup[0]
                         primer_fuzz_ham=primer_fuzz_tup[2]
-                        if primer_fuzz_ham==0:
-                            counterCS_P_0 += 1
-                        elif primer_fuzz_ham==1:
-                            counterCS_P_1 += 1
-                        elif primer_fuzz_ham==2:
-                            counterCS_P_2 += 1 
+                        counterCS_P += 1
+                        # if primer_fuzz_ham==0:
+                            # counterCS_P_0 += 1
+                        # elif primer_fuzz_ham==1:
+                            # counterCS_P_1 += 1
+                        # elif primer_fuzz_ham==2:
+                            # counterCS_P_2 += 1 
                     #breakpoint()
                     if ((primer_fuzz_tup != -1) and (anchorIndex != -1)):
                         Loci = items[1][0]
@@ -206,8 +208,10 @@ with gzip.open(file_fastq_R1, "rt") as handleR1, gzip.open(file_fastq_R2, "rt") 
                         searchCS = re.match(r'(.{12})(ATTGGAGTCCT)', readR2)
                         UMI = searchCS.group(1)
                         counterCS_P_A += 1
-                        print (counterCS_P_A)
-                        UmiSTRLociList.append((Loci, STRseq, UMI, primer, primer_fuzz, primer_fuzz_ham, anchor))
+                        #print (counterCS_P_A)
+                        #UmiSTRLociList.append((Loci, STRseq, UMI, primer, primer_fuzz, primer_fuzz_ham, anchor))
+                        # for now changing back to what it was as there is no need of that detail
+                        UmiSTRLociList.append((Loci, STRseq, UMI, primer, anchor))  
                        
                     # if readR1.startswith(primer, 0, len(primer)):
                         # counterCS_P += 1
@@ -229,12 +233,10 @@ for k in UmiSTRLociList:
     
 # summary to stdout
 print("Number of CS match  = %d, \
-                   Number of Primer match with hamming dist 0 = %d, \
-                   Number of Primer match with hamming dist 1 = %d, \
-                   Number of Primer match with hamming dist 2 = %d, \
+                   Number of Primer match = %d, \
                    Number of Primer and Anchor = %d, \
                    Number of no CS match = %d\n" % (counterCS, \
-                      counterCS_P_0, counterCS_P_1, counterCS_P_2, counterCS_P_A, counter_noCS_match))
+                      counterCS_P, counterCS_P_A, counter_noCS_match))
 
 
 # results to stdout
