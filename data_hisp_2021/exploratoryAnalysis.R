@@ -46,7 +46,7 @@ my_data_multicov_1 <- my_data_multicov %>% select(-(Start:Locus)) %>% separate(C
 
 
 # read summary stats
-my_data_summ <- read_delim("data_hisp_2021/summary_stats.txt", 
+my_data_summ <- read_delim("summary_stats.txt", 
              col_names = c("Sample",
                            "CSMatch",
                            "CS_PrimerMatch",
@@ -63,8 +63,24 @@ my_data_summ <- read_delim("data_hisp_2021/summary_stats.txt",
            NoCSMatch=as.integer(NoCSMatch))
 
 
+my_data_summ_250 <- read_delim("summary_stats_250.txt", 
+                               col_names = c("Sample",
+                                             "CSMatch",
+                                             "CS_PrimerMatch",
+                                             "CS_Primer_AnchorMatch",
+                                             "NoCSMatch"),delim = ",") %>%
+  separate(Sample, into = c("SampleID","dnainput"),sep = "[-_]") %>%
+  separate(CSMatch, into = c("foo","CSMatch"),sep = "=") %>% select(-foo) %>%
+  mutate(CSMatch=as.integer(CSMatch)) %>%
+  separate(CS_PrimerMatch,into = c("foo","CS_PrimerMatch"),sep = "=") %>%
+  separate(CS_Primer_AnchorMatch, into = c("bar","CS_Primer_AnchorMatch"),sep = "=") %>%
+  separate(NoCSMatch,into = c("foobar","NoCSMatch"),sep = "=") %>%
+  select(-c(foo,bar,foobar)) %>%
+  mutate(CS_PrimerMatch=as.integer(CS_PrimerMatch ),CS_Primer_AnchorMatch=as.integer(CS_Primer_AnchorMatch),
+         NoCSMatch=as.integer(NoCSMatch))
+
 mydata_2gether <- my_data_2 %>% left_join(my_data_multicov_1, by=c("SampleID"="SampleID","dnainput"="dnainput")) %>%
-  left_join(my_data_summ,by = c("SampleID"="SampleID","dnainput"="dnainput"))
+  left_join(my_data_summ_250,by = c("SampleID"="SampleID","dnainput"="dnainput"))
 
 mydata_2gether %>% select(-c(Umitot,Counttot)) -> mydata_2gether_long
 
@@ -72,3 +88,17 @@ mydata_2gether_long <- mydata_2gether %>% pivot_longer(cols = Umidistinct:NoCSMa
 
 mydata_2gether_long %>% ggplot(aes(x=SampleID,y=Count)) + geom_bar(aes(fill=Type),stat = "identity",position = "dodge") +
   facet_wrap(~dnainput, scales = "free_y")
+
+colnames(my_data_summ_250) <- c("SampleID","dnainput",
+                               "CSMatch_250",
+                               "CS_PrimerMatch_250",
+                               "CS_Primer_AnchorMatch_250",
+                               "NoCSMatch_250")
+
+my_data_summ_250 %>% left_join(my_data_summ, by = c("SampleID"="SampleID","dnainput"="dnainput")) %>%
+  select(SampleID,dnainput,CS_Primer_AnchorMatch,CS_Primer_AnchorMatch_250) %>% 
+  pivot_longer(cols = CS_Primer_AnchorMatch:CS_Primer_AnchorMatch_250, 
+               names_to = "Frag_len", 
+               values_to = "Num_CS_P_A_match") -> mydata_2gether_250
+mydata_2gether_250 %>% ggplot(aes(x=SampleID, y=Num_CS_P_A_match)) + geom_bar(aes(fill=Frag_len),stat = "identity",position = "dodge")+
+  facet_wrap(~dnainput,scales="free_y")

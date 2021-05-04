@@ -9,7 +9,7 @@ DNA panel.
 import os
 import re
 import collections
-import strfuzzy_primer_fuzz
+import strfuzzy_modified # same as strfuzzy_primer_fuzz
 import sys
 import gzip
 import resource
@@ -173,20 +173,20 @@ with gzip.open(file_fastq_R1, "rt") as handleR1, gzip.open(file_fastq_R2, "rt") 
             # look for common seq (CS) in readR2
             cs="ATTGGAGTCCT"
             #breakpoint()
-            cs_fuzz_tup=strfuzzy_primer_fuzz.fuzzyFind(readR2, cs,fuzz=cs_fuzz_arg,start=12,end=23)
+            cs_fuzz_tup=strfuzzy_modified.fuzzyFind(readR2, cs,fuzz=cs_fuzz_arg,start=12,end=23)
             if (cs_fuzz_tup != -1):
             #if re.match(r'(.{12})(ATTGGAGTCCT)', readR2) is not None:
                 counterCS += 1
                 for items in dict_primer.items():
                     # do fuzzy matching of anchor
                     anchor = items[1][4]
-                    anchorIndex = strfuzzy_primer_fuzz.fuzzyFind(readR1, anchor, fuzz=anchor_fuzz_arg)
+                    anchorIndex = strfuzzy_modified.fuzzyFind(readR1, anchor, fuzz=anchor_fuzz_arg)
                     primer = items[1][3]
                     
                     # TODO: a loop that the following will be done
                     # only when primer fuzz is mentioned (1 or 2) not more
                     # than that 
-                    primer_fuzz_tup=strfuzzy_primer_fuzz.fuzzyFind(readR1,primer,fuzz=primer_fuzz_arg,end=len(primer))
+                    primer_fuzz_tup=strfuzzy_modified.fuzzyFind(readR1,primer,fuzz=primer_fuzz_arg,end=len(primer))
                     
                     # the primer is at the beginning of read1 and has start index 0
                     if (primer_fuzz_tup != -1):
@@ -205,8 +205,9 @@ with gzip.open(file_fastq_R1, "rt") as handleR1, gzip.open(file_fastq_R2, "rt") 
                         Loci = items[1][0]
                         #breakpoint()
                         STRseq =  readR1[len(primer):anchorIndex[0]]
-                        searchCS = re.match(r'(.{12})(ATTGGAGTCCT)', readR2)
-                        UMI = searchCS.group(1)
+                        #searchCS = re.match(r'(.{12})(ATTGGAGTCCT)', readR2)
+                        #UMI = searchCS.group(1)
+                        UMI = readR2[0:12]
                         counterCS_P_A += 1
                         #print (counterCS_P_A)
                         #UmiSTRLociList.append((Loci, STRseq, UMI, primer, primer_fuzz, primer_fuzz_ham, anchor))
@@ -235,13 +236,15 @@ for k in UmiSTRLociList:
 print("Number of CS match  = %d, \
                    Number of Primer match = %d, \
                    Number of Primer and Anchor = %d, \
-                   Number of no CS match = %d\n" % (counterCS, \
+                   Number of no CS match = %d" % (counterCS, \
                       counterCS_P, counterCS_P_A, counter_noCS_match))
 
 
 # results to stdout
-print("{}\t{}\n".format('\t'.join(map(str,k)),v) for k,v \
-                  in UmiSTRLociCount.items())
+for k,v in UmiSTRLociCount.items():
+    print("{}\t{}".format('\t'.join(map(str,k)),v))
+#print("{}\t{}\n".format('\t'.join(map(str,k)),v) for k,v \
+#                  in UmiSTRLociCount.items())
     
 # with open('%s/%s_%s.txt' % (outputdir,file_fastq_R1[:-9], sys.argv[8]), 'w') as fh:
     # fh.writelines("Number of CS match  = %d, \
